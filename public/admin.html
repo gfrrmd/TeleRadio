@@ -15,6 +15,11 @@ pre{background:#000;padding:10px;border-radius:6px;max-height:220px;overflow:aut
 <div class="row"><button class="g" onclick="act('start')">▶ Start</button><button class="r" onclick="act('stop')">■ Stop</button><button onclick="act('skip')">⏭ Skip</button>
 <label><input type="checkbox" id="shuffle" onchange="setting('shuffle',this.checked)"> Shuffle</label>
 <label><input type="checkbox" id="loop" onchange="setting('loop',this.checked)"> Loop playlist</label></div></div>
+<div class="box"><h3 style="margin-top:0">Tujuan Stream (RTMP)</h3>
+<div class="row"><input type="text" id="rurl" placeholder="Server URL, mis. rtmps://dc5-1.rtmp.t.me/s/" style="flex:2;min-width:220px"><input type="password" id="rkey" placeholder="Stream Key" autocomplete="off" style="flex:1;min-width:150px"></div>
+<div class="row" style="margin-top:8px"><button onclick="saveCfg(false)">Simpan</button><button class="g" onclick="saveCfg(true)">Simpan &amp; Start</button><span class="m" id="cmsg"></span></div>
+<p class="m" id="cinfo"></p>
+<p class="m">Ambil Server URL dan Stream Key baru dari Telegram setiap memulai live stream baru. Kolom yang dikosongkan tidak diubah. Jika stream sedang berjalan, koneksi disambung ulang otomatis dengan nilai baru.</p></div>
 <div class="box"><h3 style="margin-top:0">Upload lagu</h3>
 <div class="row"><input type="file" id="audio" accept="audio/*" multiple></div>
 <div class="row" style="margin-top:8px"><input type="text" id="ntitle" placeholder="Judul (opsional, 1 lagu)"><input type="text" id="nartist" placeholder="Artist (opsional)"><input type="file" id="ncover" accept="image/*"></div>
@@ -34,6 +39,10 @@ const post=(u,b)=>api(u,{method:'POST',headers:{'Content-Type':'application/json
 function show(on){$('#app').hidden=!on;$('#login').hidden=on;if(on)load()}
 async function login(){try{await post('/api/login',{password:$('#pw').value});show(true)}catch(e){$('#lerr').textContent=e.message}}
 async function act(a){try{await post('/api/stream/'+a);setTimeout(refresh,800)}catch(e){alert(e.message)}}
+async function loadCfg(){try{const c=await api('/api/stream/config');$('#rurl').value=c.url||'';$('#cinfo').textContent=(c.url&&c.keySet)?'Tersimpan: '+c.url+' / key '+c.keyHint:'Belum ada URL/key tersimpan'}catch{}}
+async function saveCfg(go){try{const url=$('#rurl').value.trim(),key=$('#rkey').value.trim();
+ await post('/api/stream/config',{url,key});$('#rkey').value='';await loadCfg();$('#cmsg').textContent='Tersimpan';
+ if(go)await act('start')}catch(e){alert(e.message)}}
 async function setting(k,v){await post('/api/settings',{[k]:v})}
 async function upload(){const fs=$('#audio').files;if(!fs.length)return alert('Pilih file audio');
  const fd=new FormData();for(const f of fs)fd.append('audio',f);
@@ -49,7 +58,7 @@ async function del(id){if(confirm('Hapus lagu ini?')){await api('/api/tracks/'+i
 function render(){$('#list').innerHTML=tracks.map((t,i)=>`<tr class="${cur===t.id?'now':''}"><td>${i+1}</td><td><img src="${t.has_cover?'/cover/'+t.id+'?'+Date.now():''}" alt=""></td>
  <td><b>${esc(t.title)}</b><br><span class="m">${esc(t.artist)}</span></td><td>${fmt(t.duration)}</td>
  <td style="white-space:nowrap"><button onclick="move(${i},-1)">▲</button> <button onclick="move(${i},1)">▼</button> <button onclick="act('play/${t.id}')">▶</button> <button onclick="edit(${t.id})">✎</button> <button onclick="cover(${t.id})">🖼</button> <button class="r" onclick="del(${t.id})">🗑</button></td></tr>`).join('')||'<tr><td class="m">Belum ada lagu</td></tr>'}
-async function load(){tracks=await api('/api/tracks');const s=await api('/api/settings');$('#shuffle').checked=s.shuffle;$('#loop').checked=s.loop;render();refresh()}
+async function load(){tracks=await api('/api/tracks');const s=await api('/api/settings');$('#shuffle').checked=s.shuffle;$('#loop').checked=s.loop;render();refresh();loadCfg()}
 async function refresh(){try{const s=await (await fetch('/api/status')).json();cur=s.current?.id??null;
  $('#stat').textContent=s.running?'🔴 LIVE':'⚫ Offline';$('#now').textContent=(s.current?`Memutar: ${s.current.artist} - ${s.current.title}`:'')+(s.lastError?`  ⚠ ${s.lastError}`:'');
  $('#logs').textContent=(await api('/api/logs')).join('\n');render()}catch{}}

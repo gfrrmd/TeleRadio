@@ -12,19 +12,33 @@ const state = { running: false, current: null, startedAt: 0, lastError: null };
 let pusher = null, trackProc = null, stopFlag = false, loopPromise = null;
 let jump = null, lastId = null, offset = 0, pusherDied = false;
 
-function rtmpUrl() {
-  const base = (process.env.TELEGRAM_RTMPS_URL || '').trim().replace(/\/+$/, '');
-  const key = (process.env.TELEGRAM_STREAM_KEY || '').trim();
-  if (!base || !key) throw new Error('TELEGRAM_RTMPS_URL / TELEGRAM_STREAM_KEY belum diisi');
-  return `${base}/${key}`;
+// Tujuan stream dibaca dari database (diisi lewat panel admin); variabel environment hanya jadi cadangan.
+export async function getRtmp() {
+  const url = ((await getSetting('rtmp_url', '')) || process.env.TELEGRAM_RTMPS_URL || '').trim().replace(/\/+$/, '');
+  const key = ((await getSetting('rtmp_key', '')) || process.env.TELEGRAM_STREAM_KEY || '').trim();
+  return { url, key };
+}
+async function rtmpTarget() {
+  const { url, key } = await getRtmp();
+  if (!url || !key) throw new Error('RTMP URL / Stream Key belum diisi (isi di panel admin)');
+  return { target: `${url}/${key}`, key };
+}
+export async function getRtmpInfo() {
+  const { url, key } = await getRtmp();
+  return { url, keySet: !!key, keyHint: key ? '****' + key.slice(-4) : '' };
+}
+// Dipanggil saat URL/key diganti ketika stream sedang jalan: putuskan pusher, loop akan menyambung ulang dengan nilai baru.
+export function reconnect() {
+  if (state.running && pusher) { log('Tujuan stream diganti, menyambung ulang'); pusher.kill('SIGKILL'); }
 }
 
-function startPusher() {
+async function startPusher() {
+  const { target, key } = await rtmpTarget();
   const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'warning', '-fflags', '+genpts', '-f', 'mpegts', '-i', 'pipe:0',
-    '-c', 'copy', '-f', 'flv', '-flvflags', 'no_duration_filesize', rtmpUrl()], { stdio: ['pipe', 'ignore', 'pipe'] });
+    '-c', 'copy', '-f', 'flv', '-flvflags', 'no_duration_filesize', target], { stdio: ['pipe', 'ignore', 'pipe'] });
   pusher = p;
   p.stdin.on('error', () => {});
-  p.stderr.on('data', d => log('[push] ' + d.toString().trim()));
+  p.stderr.on('data', d => log('[push] ' + d.toString().trim().split(key).join('***')));
   p.on('exit', code => {
     log('pusher keluar, kode ' + code);
     if (pusher === p) { pusher = null; pusherDied = true; }
@@ -90,7 +104,7 @@ async function run() {
       if (!pusher) {
         if (pusherDied) { await sleep(5000); if (stopFlag) break; }
         pusherDied = false; offset = 0;
-        try { startPusher(); } catch (e) { state.lastError = e.message; log(e.message); await sleep(5000); continue; }
+        try { await startPusher(); } catch (e) { state.lastError = e.message; log(e.message); await sleep(5000); continue; }
       }
       const t = await pickNext();
       if (!t) { log('Tidak ada lagu untuk diputar, stream berhenti'); await setSetting('running', false); break; }
@@ -107,7 +121,7 @@ export async function start() {
   if (state.running) return;
   const n = await q('select count(*)::int c from tracks');
   if (!n[0].c) throw new Error('Playlist masih kosong');
-  rtmpUrl();
+  await rtmpTarget();
   state.running = true; state.lastError = null; stopFlag = false; pusherDied = false;
   await setSetting('running', true);
   loopPromise = run();

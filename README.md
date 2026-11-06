@@ -9,7 +9,7 @@ Admin panel untuk upload lagu, atur urutan, shuffle/loop, skip, start/stop.
 1. Buka channel/grup → **Start Live Stream** (atau Live Broadcast) → **Start with...** / "Stream with other apps".
 2. Salin **Server URL** (contoh `rtmps://dc5-1.rtmp.t.me/s/`) dan **Stream Key**.
 3. Jangan tekan "Start Streaming" dulu; Telegram baru menayangkan setelah ada data masuk dari worker.
-   Jika key berubah (Telegram membuat key baru tiap sesi), ganti variabel di Railway lalu redeploy.
+   Key berubah tiap sesi: isi Server URL & Stream Key baru di panel admin (`/admin`, kotak **Tujuan Stream**), tanpa redeploy.
 
 ## 2. Deploy ke Railway
 1. Upload folder ini ke repo GitHub (private disarankan): `git init && git add . && git commit -m init && git push`.
@@ -22,13 +22,13 @@ Admin panel untuk upload lagu, atur urutan, shuffle/loop, skip, start/stop.
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference ke service Postgres) |
 | `ADMIN_PASSWORD` | password panel admin (kuat!) |
 | `STATION_NAME` | nama radio di tampilan |
-| `TELEGRAM_RTMPS_URL` | Server URL dari Telegram |
-| `TELEGRAM_STREAM_KEY` | Stream Key dari Telegram |
+| `TELEGRAM_RTMPS_URL` | (opsional, cadangan) Server URL; nilai di panel admin diutamakan |
+| `TELEGRAM_STREAM_KEY` | (opsional, cadangan) Stream Key; nilai di panel admin diutamakan |
 | `DATA_DIR` | `/data` |
 
 5. **Volume:** service app → **Settings → Volumes → Add Volume**, mount path `/data`. Wajib, supaya lagu & cover tidak hilang saat redeploy.
 6. **Networking → Generate Domain** untuk mendapat URL website.
-7. Buka `https://domain-kamu/admin` → login → upload lagu → **Start**.
+7. Buka `https://domain-kamu/admin` → login → upload lagu → isi RTMP URL & Stream Key di kotak **Tujuan Stream** → **Start**.
    Halaman publik (now playing) ada di `/`.
 
 ## 3. Cara kerja singkat

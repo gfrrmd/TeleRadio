@@ -100,6 +100,16 @@ app.post('/api/stream/start', auth, wrap(async (_, res) => { await streamer.star
 app.post('/api/stream/stop', auth, wrap(async (_, res) => { await streamer.stop(); res.json({ ok: true }); }));
 app.post('/api/stream/skip', auth, (_, res) => { streamer.skip(); res.json({ ok: true }); });
 app.post('/api/stream/play/:id', auth, wrap(async (req, res) => { await streamer.start(); streamer.playNow(Number(req.params.id)); res.json({ ok: true }); }));
+app.get('/api/stream/config', auth, wrap(async (_, res) => res.json(await streamer.getRtmpInfo())));
+app.post('/api/stream/config', auth, wrap(async (req, res) => {
+  const url = String(req.body.url ?? '').trim().replace(/\/+$/, ''), key = String(req.body.key ?? '').trim();
+  if (url && !/^rtmps?:\/\/\S+$/i.test(url)) return res.status(400).json({ error: 'Server URL harus diawali rtmp:// atau rtmps://' });
+  if (key && /\s/.test(key)) return res.status(400).json({ error: 'Stream Key tidak boleh mengandung spasi' });
+  if (url) await setSetting('rtmp_url', url);
+  if (key) await setSetting('rtmp_key', key);
+  if (url || key) streamer.reconnect();
+  res.json({ ok: true });
+}));
 app.get('/api/logs', auth, (_, res) => res.json(streamer.logs));
 app.get('/api/settings', auth, wrap(async (_, res) => res.json({ shuffle: (await getSetting('shuffle', 'false')) === 'true', loop: (await getSetting('loop', 'true')) === 'true' })));
 app.post('/api/settings', auth, wrap(async (req, res) => {
