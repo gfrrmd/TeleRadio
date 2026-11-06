@@ -1,0 +1,57 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin Radio</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#111;color:#eee;max-width:900px;margin:auto;padding:16px}
+button,input[type=file]{font:inherit}button{background:#2d2d44;color:#fff;border:0;border-radius:6px;padding:8px 12px;cursor:pointer}
+button:hover{background:#3d3d5c}.g{background:#16a34a}.r{background:#dc2626}.box{background:#1b1b2a;border-radius:10px;padding:14px;margin:14px 0}
+input[type=text],input[type=password]{background:#0d0d16;border:1px solid #333;color:#fff;border-radius:6px;padding:8px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}table{width:100%;border-collapse:collapse}td{padding:6px 4px;border-bottom:1px solid #2a2a3a;font-size:14px}
+tr.now td{background:#26264a}img{width:36px;height:36px;object-fit:cover;border-radius:4px;background:#333}
+pre{background:#000;padding:10px;border-radius:6px;max-height:220px;overflow:auto;font-size:12px;white-space:pre-wrap}.m{color:#999;font-size:13px}
+</style></head><body>
+<div id="login" hidden class="box"><h3>Login Admin</h3><div class="row"><input type="password" id="pw" placeholder="Password"><button class="g" onclick="login()">Masuk</button></div><p class="m" id="lerr"></p></div>
+<div id="app" hidden>
+<div class="row"><h2 style="margin:0;flex:1">Panel Radio</h2><a href="/" style="color:#9ab" target="_blank">Halaman publik</a><button onclick="post('/api/logout').then(()=>show(false))">Keluar</button></div>
+<div class="box"><div class="row"><b id="stat">...</b></div><p class="m" id="now"></p>
+<div class="row"><button class="g" onclick="act('start')">▶ Start</button><button class="r" onclick="act('stop')">■ Stop</button><button onclick="act('skip')">⏭ Skip</button>
+<label><input type="checkbox" id="shuffle" onchange="setting('shuffle',this.checked)"> Shuffle</label>
+<label><input type="checkbox" id="loop" onchange="setting('loop',this.checked)"> Loop playlist</label></div></div>
+<div class="box"><h3 style="margin-top:0">Upload lagu</h3>
+<div class="row"><input type="file" id="audio" accept="audio/*" multiple></div>
+<div class="row" style="margin-top:8px"><input type="text" id="ntitle" placeholder="Judul (opsional, 1 lagu)"><input type="text" id="nartist" placeholder="Artist (opsional)"><input type="file" id="ncover" accept="image/*"></div>
+<p class="m">Judul/artist/cover otomatis dibaca dari tag file. Field di atas hanya dipakai jika upload 1 lagu.</p>
+<button class="g" onclick="upload()" id="ubtn">Upload</button> <span class="m" id="umsg"></span></div>
+<div class="box"><h3 style="margin-top:0">Playlist</h3><table id="list"></table></div>
+<div class="box"><h3 style="margin-top:0">Log</h3><pre id="logs"></pre></div>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+let tracks=[],cur=null;
+async function api(url,opt={}){const r=await fetch(url,{credentials:'same-origin',...opt});if(r.status===401){show(false);throw new Error('Belum login')}
+ const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.statusText);return j}
+const post=(u,b)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});
+function show(on){$('#app').hidden=!on;$('#login').hidden=on;if(on)load()}
+async function login(){try{await post('/api/login',{password:$('#pw').value});show(true)}catch(e){$('#lerr').textContent=e.message}}
+async function act(a){try{await post('/api/stream/'+a);setTimeout(refresh,800)}catch(e){alert(e.message)}}
+async function setting(k,v){await post('/api/settings',{[k]:v})}
+async function upload(){const fs=$('#audio').files;if(!fs.length)return alert('Pilih file audio');
+ const fd=new FormData();for(const f of fs)fd.append('audio',f);
+ if(fs.length===1){fd.append('title',$('#ntitle').value);fd.append('artist',$('#nartist').value);if($('#ncover').files[0])fd.append('cover',$('#ncover').files[0])}
+ $('#ubtn').disabled=true;$('#umsg').textContent='Mengupload...';
+ try{const r=await api('/api/tracks',{method:'POST',body:fd});$('#umsg').textContent=r.added+' lagu ditambahkan';$('#audio').value='';$('#ntitle').value=$('#nartist').value='';load()}
+ catch(e){$('#umsg').textContent='Gagal: '+e.message}$('#ubtn').disabled=false}
+async function move(i,d){const j=i+d;if(j<0||j>=tracks.length)return;[tracks[i],tracks[j]]=[tracks[j],tracks[i]];await post('/api/tracks/reorder',{ids:tracks.map(t=>t.id)});render()}
+async function edit(id){const t=tracks.find(x=>x.id===id);const title=prompt('Judul',t.title);if(title===null)return;const artist=prompt('Artist',t.artist);if(artist===null)return;
+ await api('/api/tracks/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,artist})});load()}
+function cover(id){const i=document.createElement('input');i.type='file';i.accept='image/*';i.onchange=async()=>{const fd=new FormData();fd.append('cover',i.files[0]);await api('/api/tracks/'+id+'/cover',{method:'POST',body:fd});load()};i.click()}
+async function del(id){if(confirm('Hapus lagu ini?')){await api('/api/tracks/'+id,{method:'DELETE'});load()}}
+function render(){$('#list').innerHTML=tracks.map((t,i)=>`<tr class="${cur===t.id?'now':''}"><td>${i+1}</td><td><img src="${t.has_cover?'/cover/'+t.id+'?'+Date.now():''}" alt=""></td>
+ <td><b>${esc(t.title)}</b><br><span class="m">${esc(t.artist)}</span></td><td>${fmt(t.duration)}</td>
+ <td style="white-space:nowrap"><button onclick="move(${i},-1)">▲</button> <button onclick="move(${i},1)">▼</button> <button onclick="act('play/${t.id}')">▶</button> <button onclick="edit(${t.id})">✎</button> <button onclick="cover(${t.id})">🖼</button> <button class="r" onclick="del(${t.id})">🗑</button></td></tr>`).join('')||'<tr><td class="m">Belum ada lagu</td></tr>'}
+async function load(){tracks=await api('/api/tracks');const s=await api('/api/settings');$('#shuffle').checked=s.shuffle;$('#loop').checked=s.loop;render();refresh()}
+async function refresh(){try{const s=await (await fetch('/api/status')).json();cur=s.current?.id??null;
+ $('#stat').textContent=s.running?'🔴 LIVE':'⚫ Offline';$('#now').textContent=(s.current?`Memutar: ${s.current.artist} - ${s.current.title}`:'')+(s.lastError?`  ⚠ ${s.lastError}`:'');
+ $('#logs').textContent=(await api('/api/logs')).join('\n');render()}catch{}}
+api('/api/me').then(()=>show(true)).catch(()=>show(false));setInterval(()=>{if(!$('#app').hidden)refresh()},5000);
+</script></body></html>

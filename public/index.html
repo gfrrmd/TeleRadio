@@ -1,0 +1,25 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Radio</title>
+<style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0f0f1a;color:#fff;font-family:system-ui,sans-serif}
+.card{width:min(92vw,420px);text-align:center}
+img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:16px;background:linear-gradient(135deg,#6d28d9,#0ea5e9)}
+h1{font-size:22px;margin:18px 0 4px}p{margin:0;color:#aaa}
+.bar{height:6px;background:#333;border-radius:3px;margin:18px 0 6px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:#fff}
+.t{display:flex;justify-content:space-between;font-size:13px;color:#aaa}.live{color:#f87171;font-size:13px;letter-spacing:2px}
+</style></head><body><div class="card">
+<div class="live" id="live"></div><br><img id="cover" alt=""><h1 id="title">-</h1><p id="artist"></p>
+<div class="bar"><i id="fill"></i></div><div class="t"><span id="el">0:00</span><span id="du">0:00</span></div></div>
+<script>
+const f=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+let st=null,at=0,cid=null;
+async function poll(){try{st=await (await fetch('/api/status')).json();at=Date.now();
+ document.title=st.station;document.getElementById('live').textContent=st.running?'● LIVE — '+st.station:'OFFLINE';
+ const c=st.current;document.getElementById('title').textContent=c?c.title:'Stream sedang offline';
+ document.getElementById('artist').textContent=c?c.artist:'';
+ if(c&&c.id!==cid){cid=c.id;const i=document.getElementById('cover');i.src=c.hasCover?'/cover/'+c.id+'?'+Date.now():'';}
+}catch{}}
+setInterval(()=>{if(!st||!st.current)return;const e=Math.min(st.current.duration,st.elapsed+(Date.now()-at)/1000);
+ document.getElementById('el').textContent=f(e);document.getElementById('du').textContent=f(st.current.duration);
+ document.getElementById('fill').style.width=(e/st.current.duration*100)+'%';},500);
+poll();setInterval(poll,4000);
+</script></body></html>
